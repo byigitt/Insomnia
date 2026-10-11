@@ -37,10 +37,8 @@ carries a GitHub build provenance attestation that names the repository, the
 ref, the commit and the workflow run that produced it.
 
 The binary is universal: `build-app.sh` builds an arm64 and an x86_64 slice
-on the Apple Silicon runner and joins them, so one zip serves Apple Silicon
-and Intel Macs. The Package step stops unless `lipo -verify_arch arm64
-x86_64` passes on the bundle's binary. Only the arm64 slice has been run on
-real hardware.
+on the Apple Silicon runner, so one zip serves Apple Silicon and Intel Macs.
+Only the arm64 slice has been run on real hardware.
 
 The bundle is the one `scripts/build-app.sh` makes: the release binary,
 `Resources/Info.plist`, the icon, and `backstop.sh` sealed under

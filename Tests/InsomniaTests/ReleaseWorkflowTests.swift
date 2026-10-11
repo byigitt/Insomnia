@@ -397,18 +397,14 @@ final class ReleaseWorkflowTests: XCTestCase {
         }
     }
 
-    /// Release bundles are universal (arm64 and x86_64, built by
-    /// build-app.sh), so the notes' first line and the README's Install
-    /// section say a release runs on Intel Macs too, and the Package step
-    /// refuses a binary without both slices before it zips anything.
-    func testAReleaseIsUniversalAndSaysSo() throws {
+    /// Release bundles are universal (build-app.sh builds arm64 and x86_64),
+    /// so the notes' first line and the README's Install section say a
+    /// release runs on Intel Macs too. RecoveryScriptTests checks that
+    /// install.sh --app stops on a bundle without this Mac's slice.
+    func testTheNotesAndTheReadmeStateTheSupportedMacs() throws {
         for id in ["stable", "nightly"] {
-            XCTAssertTrue(try job(id).joined(separator: "\n").contains(#"echo "Insomnia $VERSION for Macs with macOS 26 or later, Apple Silicon or Intel"#), "the \(id) notes' first line")
+            XCTAssertTrue(try job(id).joined(separator: "\n").contains(#"echo "Insomnia $VERSION for Apple Silicon and Intel Macs with macOS 26 or later."#), "the \(id) notes' first line")
         }
-        let build = try job("build").joined(separator: "\n")
-        let verify = try XCTUnwrap(build.range(of: "lipo dist/Insomnia.app/Contents/MacOS/Insomnia -verify_arch arm64 x86_64"), "the Package step checks both slices")
-        let zip = try XCTUnwrap(build.range(of: "/usr/bin/ditto -c -k"), "the Package step zips the bundle")
-        XCTAssertLessThan(verify.lowerBound, zip.lowerBound, "the check runs before the zip is made")
         XCTAssertTrue(try readmeInstallSection().contains("Intel"), "the README's Install section")
     }
 

@@ -156,11 +156,9 @@ and asks for administrator access to install a narrowly scoped sudoers rule. It 
 **your user account**, not just Insomnia, passwordless access to four
 power-setting commands. Review that permission before installing.
 
-Release zips carry one universal app (arm64 and x86_64), so the same zip
-installs on Apple Silicon and Intel Macs. Only Apple Silicon has been tested
-on real hardware. On Intel, the lid-close actions leave the keyboard
-backlight alone: its private brightness calls have only been measured on
-Apple Silicon, and Settings names it as refused.
+Release zips are universal (arm64 and x86_64) and install on Apple Silicon
+and Intel Macs. Only Apple Silicon has been tested. On Intel, lid close leaves
+the keyboard backlight alone, and Settings says why.
 
 ### Build from source (experimental)
 

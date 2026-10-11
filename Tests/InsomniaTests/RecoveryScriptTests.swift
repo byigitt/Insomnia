@@ -4476,6 +4476,35 @@ final class RecoveryScriptTests: XCTestCase {
         }
     }
 
+    /// A prebuilt bundle needs a slice for this Mac's CPU. On a Mac whose
+    /// sysctl reads 0 or has no hw.optional.arm64, an arm64-only bundle (as
+    /// releases were before the universal build) is refused before the
+    /// password prompt, and a universal one installs.
+    func testInstallFromPrebuiltAppOnIntelNeedsAnX86Slice() throws {
+        try fx.prepareInstall()
+        let prebuilt = try fx.writePrebuiltApp()
+        fx.setMode("launchctl", "loaded")
+        fx.setMode("codesign", "arm64-only")
+        for mode in ["intel-0", "intel-missing"] {
+            fx.clearCalls()
+            fx.setMode("sysctl", mode)
+
+            let r = try fx.run(fx.installRedirected, ["--allow-unverified-origin", "--app", prebuilt.path], extraEnvironment: ["USER": "tester"])
+
+            XCTAssertEqual(r.status, 1, "\(mode): " + r.stderr + r.stdout)
+            XCTAssertEqual(fx.callsBesideScratchFiles().last, "codesign -d --arch x86_64 \(try checkedCopy(of: prebuilt))", "\(mode): \(fx.calls())")
+            XCTAssertTrue(r.stderr.contains("\(prebuilt.path) has no x86_64 code, so it cannot run on this Mac."), r.stderr)
+            XCTAssertFalse(fx.exists(fx.sudoers))
+            XCTAssertFalse(fx.exists(fx.app))
+        }
+
+        fx.setMode("codesign", "ok")
+        let universal = try fx.run(fx.installRedirected, ["--allow-unverified-origin", "--app", prebuilt.path], extraEnvironment: ["USER": "tester"])
+
+        XCTAssertEqual(universal.status, 0, universal.stderr + universal.stdout)
+        XCTAssertTrue(fx.exists(fx.app))
+    }
+
     /// Integrity is not origin: a bundle that passes every check on it could
     /// still have been signed by anyone, and install.sh does not take the
     /// signer's word for where it came from. Whatever the signature names
@@ -4495,7 +4524,7 @@ final class RecoveryScriptTests: XCTestCase {
 
             XCTAssertEqual(r.status, 1, "\(signing): \(r.stderr + r.stdout)")
             let copy = try checkedCopy(of: prebuilt)
-            XCTAssertEqual(fx.callsBesideScratchFiles(), ["codesign --verify --strict --deep \(copy)"], "\(signing): \(fx.calls())")
+            XCTAssertEqual(fx.callsBesideScratchFiles(), ["codesign --verify --strict --deep \(copy)", "sysctl -n hw.optional.arm64", "codesign -d --arch arm64 \(copy)"], "\(signing): \(fx.calls())")
             XCTAssertTrue(r.stderr.contains("The origin of Insomnia 0.1.0 at \(prebuilt.path) is not verified."), "\(signing): \(r.stderr)")
             XCTAssertEqual(try pastedWords(of: printedCommand(in: r.stderr, containing: " --app ")), [fx.installRedirected.path, "--allow-unverified-origin", "--app", prebuilt.path], "\(signing): names the flag")
             XCTAssertTrue(r.stderr.contains("Nothing was changed"), "\(signing): \(r.stderr)")
@@ -6398,6 +6427,7 @@ private final class ScriptFixture {
             "LAUNCHCTL": bin.appendingPathComponent("launchctl").path,
             "SUDO": bin.appendingPathComponent("sudo").path,
             "CODESIGN": bin.appendingPathComponent("codesign").path,
+            "SYSCTL": bin.appendingPathComponent("sysctl").path,
             "MV": bin.appendingPathComponent("mv").path,
             "RM": bin.appendingPathComponent("rm").path,
             "RMDIR": bin.appendingPathComponent("rmdir").path,
@@ -6653,6 +6683,8 @@ private final class ScriptFixture {
         // fixed designated requirement the way codesign does (on stderr,
         // with the "# " an implicit requirement carries). `-dvv` describes
         // the signature per codesign.signing (adhoc | developer-id:<team>).
+        // Mode "arm64-only": `-d --arch` fails for any other arch, the way
+        // codesign does for a bundle without that slice.
         // `--verify` passes unless mode "verify-fails"; mode
         // "deep-verify-fails" fails only the `--deep` form install.sh runs
         // on a prebuilt bundle, and "requirement-verify-fails" only the
@@ -6667,6 +6699,10 @@ private final class ScriptFixture {
         \(hangHere("codesign"))
         \(lockHeldHere())
         signing="$(cat "\(r)/codesign.signing" 2>/dev/null || echo adhoc)"
+        if [[ "${1:-} ${2:-}" == "-d --arch" ]]; then
+          if [[ "$mode" == arm64-only && "$3" != arm64 ]]; then echo "$4: object file format unrecognized, invalid, or unsuitable" >&2; exit 1; fi
+          exit 0
+        fi
         last=""; deep=0; pinned=0; for a in "$@"; do last="$a"; [[ "$a" == --deep ]] && deep=1; [[ "$a" == -R=* ]] && pinned=1; done
         for a in "$@"; do
           case "$a" in
@@ -6712,7 +6748,20 @@ private final class ScriptFixture {
         """)
         // sysctl: `-n kern.bootsessionuuid` reads boot.uuid and is not
         // logged (backstop.sh asks on every run; it changes nothing).
+        // `-n hw.optional.arm64` is logged and reads 1, an Apple Silicon Mac
+        // (also what a shell under Rosetta reads there). Mode "intel-0"
+        // reads 0; "intel-missing" fails the way sysctl does for a key the
+        // Mac lacks.
         try writeFake("sysctl", """
+        if [[ "$*" == "-n hw.optional.arm64" ]]; then
+          printf 'sysctl %s\\n' "$*" >> "\(calls)"
+          case "$(cat "\(r)/sysctl.mode" 2>/dev/null || echo ok)" in
+            intel-0) echo 0 ;;
+            intel-missing) echo "sysctl: unknown oid 'hw.optional.arm64'" >&2; exit 1 ;;
+            *) echo 1 ;;
+          esac
+          exit 0
+        fi
         cat "\(r)/boot.uuid"
         """)
         // chmod: recorded in chmod.calls, apart from calls.log, then run for

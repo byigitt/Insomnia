@@ -15,14 +15,15 @@
 #                                             signed); only from a checkout's
 #                                             scripts/ folder (in_checkout)
 #   ./install.sh --app /path/to/Insomnia.app  installs a prebuilt bundle, such
-#                                             as the one in a release zip,
-#                                             after checking its signature,
-#                                             bundle identifier and version.
-#                                             Those show the bundle is intact,
-#                                             not who made it, so it is
-#                                             refused unless
-#                                             --allow-unverified-origin is
-#                                             given as well: releases are
+#                                             as the one in a release zip
+#                                             (refused without a slice for
+#                                             this Mac's CPU), after
+#                                             checking its signature, bundle
+#                                             identifier and version. Those
+#                                             show the bundle is intact, not
+#                                             who made it, so it is refused
+#                                             unless --allow-unverified-origin
+#                                             is given as well: releases are
 #                                             ad-hoc signed and not notarized,
 #                                             and the checksum and attestation
 #                                             the user checks are what tie a
@@ -56,6 +57,7 @@ PLUTIL=/usr/bin/plutil
 CODESIGN=/usr/bin/codesign
 DITTO=/usr/bin/ditto
 CHMOD=/bin/chmod
+SYSCTL=/usr/sbin/sysctl
 LOCKF=/usr/bin/lockf
 MV=/bin/mv
 RM=/bin/rm
@@ -318,6 +320,17 @@ if [[ -n "$PREBUILT" ]]; then
   if ! "$CODESIGN" --verify --strict --deep "$CHECKED_APP"; then
     echo "$PREBUILT fails 'codesign --verify --strict --deep': the download is damaged or was modified. Nothing was changed." >&2
     echo "Check the zip against SHA256SUMS and 'gh attestation verify' (README, Install) and download it again." >&2
+    exit 1
+  fi
+  # A bundle without code for this Mac's CPU would install and never launch
+  # (releases before the universal build are arm64 only). hw.optional.arm64
+  # describes the hardware, so a shell under Rosetta on an Apple Silicon Mac
+  # still reads 1; an Intel Mac reads 0 or has no such key. codesign, not
+  # lipo, reads the slice: lipo needs the developer tools.
+  arch=x86_64
+  if [[ "$("$SYSCTL" -n hw.optional.arm64 2>/dev/null || true)" == 1 ]]; then arch=arm64; fi
+  if ! "$CODESIGN" -d --arch "$arch" "$CHECKED_APP" 2>/dev/null; then
+    echo "$PREBUILT has no $arch code, so it cannot run on this Mac. Install a newer release or build from source (README). Nothing was changed." >&2
     exit 1
   fi
   PREBUILT_ID="$("$PLUTIL" -extract CFBundleIdentifier raw -o - "$INFO_PLIST" 2>/dev/null || true)"

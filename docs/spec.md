@@ -41,7 +41,10 @@ closed bag. Its design goals are to:
   `--app` after verifying its integrity (only with
   `--allow-unverified-origin`, since it cannot verify where a bundle came
   from), to `~/Applications`. The Release workflow
-  packages the same bundle (`docs/releasing.md`). `install.sh` and
+  packages the same bundle (`docs/releasing.md`). `install.sh --app`
+  stops on a bundle without arm64 code where `sysctl -n hw.optional.arm64`
+  reads 1 (Apple Silicon, also under Rosetta), or without x86_64 code
+  elsewhere. `install.sh` and
   `uninstall.sh` take sibling scripts (`build-app.sh`, `backstop.sh`) only
   from a source checkout's `scripts/` folder, with `Package.swift` one level
   up, and never from the folder above their own: the release zip carries

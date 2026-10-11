@@ -46,10 +46,8 @@ step() { printf '\n==> %s\n' "$*"; }
 # 1. Build -------------------------------------------------------------------
 step "Building (release)"
 cd "$ROOT"
-# One binary with an arm64 and an x86_64 slice, so the same bundle runs on
-# Apple Silicon and Intel Macs. More than one --arch makes swift build use
-# the Xcode build system, which builds both slices into one binary under
-# .build/apple; --show-bin-path takes the same flags to name that directory.
+# Both slices in one binary, so the bundle runs on Apple Silicon and Intel
+# Macs. --show-bin-path below gets the same flags, so it names that output.
 BUILD_FLAGS=(--arch arm64 --arch x86_64)
 # INSOMNIA_LID_SIMULATION=1 compiles the scripts/simulate-lid.sh file trigger
 # (LidSimulation.swift) into this release build, for release validation on

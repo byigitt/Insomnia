@@ -4476,36 +4476,6 @@ final class RecoveryScriptTests: XCTestCase {
         }
     }
 
-    /// Release bundles are arm64 only. On a Mac whose hardware is not Apple
-    /// Silicon (sysctl reads 0, or has no hw.optional.arm64), install.sh
-    /// --app refuses before it copies or checks the bundle, and names the
-    /// source build. A source build on the same Mac does not ask.
-    func testInstallFromPrebuiltAppRefusesOnAMacThatIsNotAppleSilicon() throws {
-        try fx.prepareInstall()
-        let prebuilt = try fx.writePrebuiltApp()
-        fx.setMode("launchctl", "loaded")
-        for (mode, read) in [("intel-0", "0"), ("intel-missing", "no value")] {
-            fx.clearCalls()
-            fx.setMode("sysctl", mode)
-
-            let r = try fx.run(fx.installRedirected, ["--allow-unverified-origin", "--app", prebuilt.path], extraEnvironment: ["USER": "tester"])
-
-            XCTAssertEqual(r.status, 1, "\(mode): " + r.stderr + r.stdout)
-            XCTAssertEqual(fx.callsBesideScratchFiles(), ["sysctl -n hw.optional.arm64"], "\(mode): nothing else ran: \(fx.calls())")
-            XCTAssertTrue(r.stderr.contains("Release bundles of Insomnia run on Apple Silicon Macs only, and this Mac is not one ('sysctl -n hw.optional.arm64' gave \(read))."), r.stderr)
-            XCTAssertTrue(r.stderr.contains("Build and install from a source checkout instead (README, Build from source). Nothing was changed."), r.stderr)
-            XCTAssertFalse(fx.exists(fx.sudoers))
-            XCTAssertFalse(fx.exists(fx.app))
-        }
-
-        fx.clearCalls()
-        let built = try fx.run(fx.installRedirected, extraEnvironment: ["USER": "tester"])
-
-        XCTAssertEqual(built.status, 0, built.stderr + built.stdout)
-        XCTAssertFalse(fx.calls().contains { $0.hasPrefix("sysctl") }, "a source build fits the Mac it is built on: \(fx.calls())")
-        XCTAssertTrue(fx.exists(fx.app))
-    }
-
     /// Integrity is not origin: a bundle that passes every check on it could
     /// still have been signed by anyone, and install.sh does not take the
     /// signer's word for where it came from. Whatever the signature names
@@ -4525,7 +4495,7 @@ final class RecoveryScriptTests: XCTestCase {
 
             XCTAssertEqual(r.status, 1, "\(signing): \(r.stderr + r.stdout)")
             let copy = try checkedCopy(of: prebuilt)
-            XCTAssertEqual(fx.callsBesideScratchFiles(), ["sysctl -n hw.optional.arm64", "codesign --verify --strict --deep \(copy)"], "\(signing): \(fx.calls())")
+            XCTAssertEqual(fx.callsBesideScratchFiles(), ["codesign --verify --strict --deep \(copy)"], "\(signing): \(fx.calls())")
             XCTAssertTrue(r.stderr.contains("The origin of Insomnia 0.1.0 at \(prebuilt.path) is not verified."), "\(signing): \(r.stderr)")
             XCTAssertEqual(try pastedWords(of: printedCommand(in: r.stderr, containing: " --app ")), [fx.installRedirected.path, "--allow-unverified-origin", "--app", prebuilt.path], "\(signing): names the flag")
             XCTAssertTrue(r.stderr.contains("Nothing was changed"), "\(signing): \(r.stderr)")
@@ -4577,7 +4547,7 @@ final class RecoveryScriptTests: XCTestCase {
         let edited = try fx.run(fx.installRedirected, ["--allow-unverified-origin", "--app", prebuilt.path], extraEnvironment: ["USER": "tester"])
 
         XCTAssertEqual(edited.status, 1, edited.stderr + edited.stdout)
-        XCTAssertEqual(fx.callsBesideScratchFiles(), ["sysctl -n hw.optional.arm64"], "the real codesign refused before any other fake tool ran: \(fx.calls())")
+        XCTAssertEqual(fx.callsBesideScratchFiles(), [], "the real codesign refused before any fake tool ran: \(fx.calls())")
         XCTAssertTrue(edited.stderr.contains("fails 'codesign --verify --strict --deep'"), edited.stderr)
         XCTAssertTrue(edited.stderr.contains("Nothing was changed"), edited.stderr)
     }
@@ -4683,7 +4653,7 @@ final class RecoveryScriptTests: XCTestCase {
 
         XCTAssertEqual(r.status, 1, r.stderr + r.stdout)
         let calls = fx.callsBesideScratchFiles()
-        XCTAssertEqual(calls, ["sysctl -n hw.optional.arm64", "codesign --verify --strict --deep \(try checkedCopy(of: prebuilt))"], "nothing after the failed check: \(fx.calls())")
+        XCTAssertEqual(calls, ["codesign --verify --strict --deep \(try checkedCopy(of: prebuilt))"], "nothing after the failed check: \(fx.calls())")
         XCTAssertTrue(r.stderr.contains("fails 'codesign --verify --strict --deep'"), r.stderr)
         XCTAssertTrue(r.stderr.contains("Nothing was changed"), r.stderr)
         XCTAssertTrue(r.stderr.contains("SHA256SUMS"), "points at the download checks: \(r.stderr)")
@@ -4724,7 +4694,7 @@ final class RecoveryScriptTests: XCTestCase {
 
         XCTAssertEqual(r.status, 0, r.stderr + r.stdout)
         let calls = fx.calls()
-        let build = try XCTUnwrap(calls.firstIndex(of: "swift build -c release"), "\(calls)")
+        let build = try XCTUnwrap(calls.firstIndex(of: "swift build -c release --arch arm64 --arch x86_64"), "\(calls)")
         let sign = try XCTUnwrap(calls.firstIndex { $0.hasPrefix("codesign --force --sign - ") }, "ad-hoc, no identity in the environment: \(calls)")
         let visudo = try XCTUnwrap(calls.firstIndex { $0.hasPrefix("sudo visudo") }, "\(calls)")
         XCTAssertLessThan(build, sign)
@@ -5811,7 +5781,7 @@ final class RecoveryScriptTests: XCTestCase {
         let plain = try fx.run(fx.installRedirected, extraEnvironment: ["USER": "tester"])
         XCTAssertEqual(plain.status, 0, plain.stderr + plain.stdout)
         let plainBuilds = fx.calls().filter { $0.hasPrefix("swift build") }
-        XCTAssertEqual(plainBuilds, ["swift build -c release", "swift build -c release --show-bin-path"], "\(fx.calls())")
+        XCTAssertEqual(plainBuilds, ["swift build -c release --arch arm64 --arch x86_64", "swift build -c release --arch arm64 --arch x86_64 --show-bin-path"], "\(fx.calls())")
         XCTAssertFalse(plain.stdout.contains("lid simulation compiled in"), plain.stdout)
 
         fx.clearCalls()
@@ -5819,8 +5789,8 @@ final class RecoveryScriptTests: XCTestCase {
         XCTAssertEqual(simulated.status, 0, simulated.stderr + simulated.stdout)
         let simulatedBuilds = fx.calls().filter { $0.hasPrefix("swift build") }
         XCTAssertEqual(simulatedBuilds, [
-            "swift build -c release -Xswiftc -DINSOMNIA_LID_SIMULATION",
-            "swift build -c release -Xswiftc -DINSOMNIA_LID_SIMULATION --show-bin-path",
+            "swift build -c release --arch arm64 --arch x86_64 -Xswiftc -DINSOMNIA_LID_SIMULATION",
+            "swift build -c release --arch arm64 --arch x86_64 -Xswiftc -DINSOMNIA_LID_SIMULATION --show-bin-path",
         ], "\(fx.calls())")
         XCTAssertTrue(simulated.stdout.contains("lid simulation compiled in (INSOMNIA_LID_SIMULATION=1)"), simulated.stdout)
 
@@ -5828,7 +5798,7 @@ final class RecoveryScriptTests: XCTestCase {
         fx.clearCalls()
         let other = try fx.run(fx.installRedirected, extraEnvironment: ["USER": "tester", "INSOMNIA_LID_SIMULATION": "yes"])
         XCTAssertEqual(other.status, 0, other.stderr + other.stdout)
-        XCTAssertEqual(fx.calls().filter { $0.hasPrefix("swift build") }.first, "swift build -c release", "\(fx.calls())")
+        XCTAssertEqual(fx.calls().filter { $0.hasPrefix("swift build") }.first, "swift build -c release --arch arm64 --arch x86_64", "\(fx.calls())")
 
         // A prebuilt bundle is already compiled: asking for the watcher with
         // --app is refused before anything runs, instead of installing a
@@ -6428,7 +6398,6 @@ private final class ScriptFixture {
             "LAUNCHCTL": bin.appendingPathComponent("launchctl").path,
             "SUDO": bin.appendingPathComponent("sudo").path,
             "CODESIGN": bin.appendingPathComponent("codesign").path,
-            "SYSCTL": bin.appendingPathComponent("sysctl").path,
             "MV": bin.appendingPathComponent("mv").path,
             "RM": bin.appendingPathComponent("rm").path,
             "RMDIR": bin.appendingPathComponent("rmdir").path,
@@ -6743,20 +6712,7 @@ private final class ScriptFixture {
         """)
         // sysctl: `-n kern.bootsessionuuid` reads boot.uuid and is not
         // logged (backstop.sh asks on every run; it changes nothing).
-        // `-n hw.optional.arm64` is logged and reads 1, an Apple Silicon Mac
-        // (also what a shell under Rosetta reads there). Mode "intel-0"
-        // reads 0; "intel-missing" fails the way sysctl does for a key the
-        // Mac lacks.
         try writeFake("sysctl", """
-        if [[ "$*" == "-n hw.optional.arm64" ]]; then
-          printf 'sysctl %s\\n' "$*" >> "\(calls)"
-          case "$(cat "\(r)/sysctl.mode" 2>/dev/null || echo ok)" in
-            intel-0) echo 0 ;;
-            intel-missing) echo "sysctl: unknown oid 'hw.optional.arm64'" >&2; exit 1 ;;
-            *) echo 1 ;;
-          esac
-          exit 0
-        fi
         cat "\(r)/boot.uuid"
         """)
         // chmod: recorded in chmod.calls, apart from calls.log, then run for

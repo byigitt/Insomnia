@@ -20,8 +20,9 @@ SIM_SCRATCH=.build/lid-simulation
 # its log lines and the build marker shown in the status menu and Settings.
 SYMBOL='13LidSimulationC'
 TEXTS=("lid SIMULATED" "Lid simulation build:")
-# The flags of CI's "Build release" step; a warning in either build fails.
-RELEASE_FLAGS=(-c release -Xswiftc -warnings-as-errors)
+# The flags of CI's "Build release" step, both slices of the release binary;
+# a warning in either build fails.
+RELEASE_FLAGS=(-c release --arch arm64 --arch x86_64 -Xswiftc -warnings-as-errors)
 
 "$SWIFT" build "${RELEASE_FLAGS[@]}"
 plain="$("$SWIFT" build "${RELEASE_FLAGS[@]}" --show-bin-path)/Insomnia"

@@ -15,15 +15,14 @@
 #                                             signed); only from a checkout's
 #                                             scripts/ folder (in_checkout)
 #   ./install.sh --app /path/to/Insomnia.app  installs a prebuilt bundle, such
-#                                             as the one in a release zip
-#                                             (arm64 only, so this stops on a
-#                                             Mac without Apple Silicon), after
-#                                             checking its signature, bundle
-#                                             identifier and version. Those
-#                                             show the bundle is intact, not
-#                                             who made it, so it is refused
-#                                             unless --allow-unverified-origin
-#                                             is given as well: releases are
+#                                             as the one in a release zip,
+#                                             after checking its signature,
+#                                             bundle identifier and version.
+#                                             Those show the bundle is intact,
+#                                             not who made it, so it is
+#                                             refused unless
+#                                             --allow-unverified-origin is
+#                                             given as well: releases are
 #                                             ad-hoc signed and not notarized,
 #                                             and the checksum and attestation
 #                                             the user checks are what tie a
@@ -57,7 +56,6 @@ PLUTIL=/usr/bin/plutil
 CODESIGN=/usr/bin/codesign
 DITTO=/usr/bin/ditto
 CHMOD=/bin/chmod
-SYSCTL=/usr/sbin/sysctl
 LOCKF=/usr/bin/lockf
 MV=/bin/mv
 RM=/bin/rm
@@ -299,15 +297,6 @@ WORK="$("$MKTEMP" -d "${TMPDIR:-/tmp}/insomnia-install.XXXXXX")"
 #    changed when this step fails.
 if [[ -n "$PREBUILT" ]]; then
   step "Checking the prebuilt bundle $PREBUILT"
-  # Release bundles are built for arm64 only (the Release workflow runs on
-  # Apple Silicon). hw.optional.arm64 describes the hardware, so a shell
-  # running under Rosetta on an Apple Silicon Mac still reads 1; an Intel
-  # Mac reads 0 or has no such key.
-  arm64="$("$SYSCTL" -n hw.optional.arm64 2>/dev/null || true)"
-  if [[ "$arm64" != 1 ]]; then
-    echo "Release bundles of Insomnia run on Apple Silicon Macs only, and this Mac is not one ('sysctl -n hw.optional.arm64' gave ${arm64:-no value}). Build and install from a source checkout instead (README, Build from source). Nothing was changed." >&2
-    exit 1
-  fi
   if [[ ! -d "$PREBUILT" || ! -f "$PREBUILT/Contents/Info.plist" ]]; then
     echo "$PREBUILT is not an app bundle (no Contents/Info.plist). Nothing was changed." >&2
     exit 1

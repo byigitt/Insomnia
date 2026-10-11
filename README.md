@@ -38,7 +38,7 @@
 
 ## Install
 
-Requires **macOS 26 or later on an Apple Silicon Mac**.
+Requires **macOS 26 or later**, on an Apple Silicon or Intel Mac.
 
 Insomnia is published on two channels on the
 [releases page](https://github.com/krishhgg/Insomnia/releases):
@@ -156,9 +156,11 @@ and asks for administrator access to install a narrowly scoped sudoers rule. It 
 **your user account**, not just Insomnia, passwordless access to four
 power-setting commands. Review that permission before installing.
 
-Release zips are built for arm64 only, and their `install.sh --app` stops on
-an Intel Mac. On Intel, building from source (below) is the only option, and
-it is untested there.
+Release zips carry one universal app (arm64 and x86_64), so the same zip
+installs on Apple Silicon and Intel Macs. Only Apple Silicon has been tested
+on real hardware. On Intel, the lid-close actions leave the keyboard
+backlight alone: its private brightness calls have only been measured on
+Apple Silicon, and Settings names it as refused.
 
 ### Build from source (experimental)
 
